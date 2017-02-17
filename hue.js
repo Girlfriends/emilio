@@ -7,7 +7,7 @@ var fs = require('fs');
 var credentials = fs.readFileSync('credentials.json', 'utf8');
 var jsonCredentials = JSON.parse(credentials);
 
-var createApi = function(bridgeJSON){
+var createApi = function(bridgeJSON) {
 	return new HueApi(bridgeJSON.ipaddress, jsonCredentials.hueUsername);
 }
 
@@ -15,7 +15,17 @@ var displayResult = function(result) {
     console.log(JSON.stringify(result, null, 2));
 };
 
-var processLights = function(bridge){
+var animateLights = function(api, interval, period) {
+	var time = Math.floor(Date.now()/interval) * interval;
+	var brightness = Math.sin((time/period) * (2 * Math.PI));
+	brightness = brightness * 50 + 50;
+	var state = lightState.create().transition(interval).brightness(brightness);
+	api.setLightState(1, state).then().done();
+	console.log('Time: ' + time);
+	console.log('Brightness: ' + brightness);
+}
+
+var processLights = function(bridge) {
     if (!bridge.length || !bridge[0]) {
     	console.log('No bridges found. Exiting.');
     } else {
@@ -23,8 +33,7 @@ var processLights = function(bridge){
 	    console.log('Creating API');
 	    var api = createApi(bridge[0]);
 	    console.log('API created. Controlling lights.');
-	    var state = lightState.create().on().brightness(100);
-	    api.setLightState(1, state).then(displayResult).done();
+	    setInterval(animateLights, 400, api, 400, 6000);
     }
 };
 
