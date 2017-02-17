@@ -29,6 +29,10 @@ app.get("/callback", function (req, res) {
     });
 });
 
+app.get("/hue", function(req, res) {
+    console.log('hue light');
+})
+
 // launch the server
 app.listen(3000, function(){
     console.log('example app listening on port 3000!')
