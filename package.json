@@ -19,6 +19,8 @@
   "dependencies": {
     "express": "^4.14.1",
     "fitbit-node": "^2.0.5",
-    "node-hue-api": "^2.4.1"
+    "node-hue-api": "^2.4.1",
+    "pug": "^0.1.0",
+    "request": "^2.79.0"
   }
 }
