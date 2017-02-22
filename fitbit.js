@@ -12,6 +12,7 @@ app.set('view engine', 'pug');
 
 var code;
 var heartRate;
+var lastFetchHeartRateTime;
 var userId;
 var accessToken;
 
@@ -30,6 +31,7 @@ var fetchProfile = function(accessToken, response) {
 
 var fetchHeartRate = function(accessToken, response) {
     console.log('Pulling heart rate');
+    lastFetchHeartRateTime = new Date();
     if (!accessToken) {
         console.log('Not yet authenticated.');
         return;
@@ -81,7 +83,7 @@ app.get("/callback", function (req, res) {
 
 app.get('/', function(req, res) {
     var getFitApiStatus = function(){
-        if (!heartRate) {
+        if (!accessToken) {
             return 'Still authenticating'
         } else {
             return 'API authenticated'
@@ -91,7 +93,9 @@ app.get('/', function(req, res) {
         {
             title: 'Hey',
             message: 'Hello there!',
-            fitApiStatus: getFitApiStatus()
+            fitApiStatus: getFitApiStatus(),
+            lastHeartRate: heartRate,
+            lastFetchHeartRateTime: lastFetchHeartRateTime
         });
 });
 
