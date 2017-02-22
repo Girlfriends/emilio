@@ -47,6 +47,13 @@ var fetchHeartRate = function(accessToken, response) {
     }
 }
 
+// var refreshAccessToken = function() {
+//     console.log("Refreshing access token");
+//     if (!accessToken) {
+//         console.log("No access token to refresh!");
+//     }
+// }
+
 // redirect the user to the Fitbit authorization page
 app.get("/authorize", function (req, res) {
     // request access to the user's activity, heartrate, location, nutrion, profile, settings, sleep, social, and weight scopes
@@ -93,4 +100,5 @@ app.listen(3000, function(){
     console.log('example app listening on port 3000!');
     // fetchHeartRate();
     setInterval(fetchHeartRate, 15000 * 60);
+    // setInterval(refreshAccessToken, 2500);
 });

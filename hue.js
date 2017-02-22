@@ -9,6 +9,36 @@ var credentials = fs.readFileSync('credentials.json', 'utf8');
 var jsonCredentials = JSON.parse(credentials);
 var api;
 
+var userStatus = {
+	state: "DAY",
+	heartRate: 180
+}
+
+var hueStatus = {
+	dayAnimation: {
+		rising : true,
+		midpoint: 0.2,
+		midpointOrigin: 0.10,
+		midpointDriftRate: 0.025,
+		midpointDriftMax: 0.00,
+		rateMultiplier: 0.2,
+		maxBrightness: 50,
+		minBrightness: 0,
+		flipChance: 0.0
+	},
+	asleepAnimation: {
+		exponent: 1.2
+	},
+	lights: [
+		{
+			state: true
+		},
+		{
+			state: false
+		}
+	]
+}
+
 var createApi = function(bridgeJSON) {
 	return new HueApi(bridgeJSON.ipaddress, jsonCredentials.hueUsername);
 }
@@ -17,14 +47,9 @@ var displayResult = function(result) {
 		console.log(JSON.stringify(result, null, 2));
 };
 
-var animateLights = function(api, interval, period) {
-	var time = Math.floor(Date.now()/interval) * interval;
-	var brightness = Math.sin((time/period) * (2 * Math.PI));
-	brightness = brightness * 50 + 50;
-	var state = lightState.create().transition(interval).brightness(brightness);
-	api.setLightState(1, state).then().done();
-	console.log('Time: ' + time);
-	console.log('Brightness: ' + brightness);
+var animateLights = function() {
+	animateDay(userStatus.heartRate);
+	// animateAsleep();
 }
 
 var processLights = function(bridge) {
@@ -34,11 +59,44 @@ var processLights = function(bridge) {
 			console.log("Hue Bridges Found: " + JSON.stringify(bridge));
 			console.log('Creating API');
 			api = createApi(bridge[0]);
-			console.log("API created. Ready to receive OSC");
-			// console.log('API created. Controlling lights.');
-			// setInterval(animateLights, 400, api, 400, 6000);
+			// console.log("API created. Ready to receive OSC");
+			console.log('API created. Controlling lights.');
+			animateLights();
 		}
 };
+
+var animateDay = function(rate) {
+	var msecInterval = 60000 / (rate * hueStatus.dayAnimation.rateMultiplier);
+	var transition = msecInterval * (hueStatus.dayAnimation.rising ? hueStatus.dayAnimation.midpoint : 1 - hueStatus.dayAnimation.midpoint);
+	for (var i=0; i<2; i++) {
+		hueStatus.lights[i].state = !hueStatus.lights[i].state;
+		var brightness = hueStatus.lights[i].state ? hueStatus.dayAnimation.maxBrightness : hueStatus.dayAnimation.minBrightness;
+		var state = lightState.create().brightness(brightness).transition(transition);
+		api.setLightState(i+1, state).then().done();
+	}
+	hueStatus.dayAnimation.rising = !hueStatus.dayAnimation.rising;
+	if (hueStatus.dayAnimation.rising) {
+		var midShift = (Math.random() - 0.5) * 2 * hueStatus.dayAnimation.midpointDriftRate;
+		var midMax = hueStatus.dayAnimation.midpointOrigin + hueStatus.dayAnimation.midpointDriftMax;
+		var midMin = hueStatus.dayAnimation.midpointOrigin - hueStatus.dayAnimation.midpointDriftMax;
+		hueStatus.dayAnimation.midpoint = Math.max(midMin, Math.min(midMax, hueStatus.dayAnimation.midpoint + midShift));
+		if (hueStatus.dayAnimation.flipChance > Math.random()) {
+			hueStatus.dayAnimation.midpoint = 1.0 - hueStatus.dayAnimation.midpoint;
+			hueStatus.dayAnimation.midpointOrigin = 1.0 - hueStatus.dayAnimation.midpointOrigin;
+		}
+	}
+	setTimeout(animateLights, transition);
+}
+
+var animateAsleep = function() {
+	var msecInterval = 100;
+	for (var i=0; i<2; i++) {
+		var brightness = Math.pow(Math.random(), hueStatus.asleepAnimation.exponent) * 100;
+		var state = lightState.create().brightness(brightness).transition(0);
+		api.setLightState(i+1, state).then().done();
+	}
+	setTimeout(animateLights, msecInterval);
+}
 
 // --------------------------
 // Using a promise
