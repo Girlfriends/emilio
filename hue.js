@@ -18,16 +18,16 @@ var hueStatus = {
 	dayAnimation: {
 		rising : true,
 		midpoint: 0.2,
-		midpointOrigin: 0.10,
+		midpointOrigin: 0.15,
 		midpointDriftRate: 0.025,
-		midpointDriftMax: 0.00,
+		midpointDriftMax: 0.05,
 		rateMultiplier: 0.2,
-		maxBrightness: 50,
+		maxBrightness: 25,
 		minBrightness: 0,
-		flipChance: 0.0
+		flipChance: 0.4
 	},
 	asleepAnimation: {
-		exponent: 1.2
+		exponent: 2.0
 	},
 	lights: [
 		{
@@ -50,6 +50,8 @@ var displayResult = function(result) {
 var animateLights = function() {
 	animateDay(userStatus.heartRate);
 	// animateAsleep();
+	// animateAwakeRestlessHelper("awake");
+	// animateAwakeRestlessHelper("restless");
 }
 
 var processLights = function(bridge) {
@@ -86,6 +88,44 @@ var animateDay = function(rate) {
 		}
 	}
 	setTimeout(animateLights, transition);
+}
+
+var animateAwakeRestlessHelper = function(type) {
+	switch (type) {
+		case "awake":
+			animateAwake();
+			break;
+		case "restless":
+			animateRestless();
+			break;
+		default:
+			console.log("Undefined restlessness helper");
+			break;
+	}
+}
+
+var animateAwake = function() {
+	var msecInterval = Math.random() * 900 + 100;
+	for (var i=0; i<2; i++) {
+		var transition = msecInterval * Math.sqrt(Math.random());
+		hueStatus.lights[i].state = !hueStatus.lights[i].state;
+		var brightness = 100 * ((hueStatus.lights[i].state ? 0.5 : 0) + Math.random() * 0.5);
+		var state = lightState.create().brightness(brightness).transition(transition);
+		api.setLightState(i + 1, state).then().done();
+	}
+	setTimeout(animateLights, msecInterval);
+}
+
+var animateRestless = function() {
+	var msecInterval = Math.random() * 400 + 100;
+	for (var i=0; i<2; i++) {
+		var transition = msecInterval * Math.random();
+		hueStatus.lights[i].state = !hueStatus.lights[i].state;
+		var brightness = 100 * ((hueStatus.lights[i].state ? 0.5 : 0) + Math.random() * 0.5);
+		var state = lightState.create().brightness(brightness).transition(transition);
+		api.setLightState(i + 1, state).then().done();
+	}
+	setTimeout(animateLights, msecInterval);
 }
 
 var animateAsleep = function() {
