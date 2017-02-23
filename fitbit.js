@@ -12,7 +12,6 @@ app.set('view engine', 'pug');
 
 var code;
 var heartRate;
-var lastFetchHeartRateTime;
 var userId;
 var accessToken;
 
@@ -31,14 +30,18 @@ var fetchProfile = function(accessToken, response) {
 
 var fetchHeartRate = function(accessToken, response) {
     console.log('Pulling heart rate');
-    lastFetchHeartRateTime = new Date();
+    var now = new Date();
+    var fifteenMinsAgo = new Date();
+    fifteenMinsAgo.setMinutes(fifteenMinsAgo.getMinutes() - 15);
+    var startTime = `${fifteenMinsAgo.getHours()}:${fifteenMinsAgo.getMinutes()}`;
+    var endTime = `${now.getHours()}:${now.getMinutes()}`;
     if (!accessToken) {
         console.log('Not yet authenticated.');
         return;
     } else {
         client.get(
             // '/activities/heart/date/2017-02-11/2017-02-13/1sec.json',
-            '/activities/heart/date/2017-02-13/1d.json',
+            `/activities/heart/date/today/1d/1sec/time/${startTime}/${endTime}.json`,
             accessToken
         ).then(function(results) {
             heartRate = results[0];
@@ -48,6 +51,10 @@ var fetchHeartRate = function(accessToken, response) {
         });
     }
 }
+
+// awake/asleep
+    // heart rate
+    // asleep - awake, restless, asleep
 
 // var refreshAccessToken = function() {
 //     console.log("Refreshing access token");
@@ -75,7 +82,7 @@ app.get("/callback", function (req, res) {
         // use the access token to fetch the user's profile information
         console.log('Access token requested');
         accessToken = result.access_token;
-        fetchProfile(accessToken, res);
+        fetchHeartRate(accessToken, res);
     }).catch(function (error) {
         res.send(error);
     });
