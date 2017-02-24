@@ -7,7 +7,7 @@ var express = require("express"),
     Hue = require("./hue.js"),
     clientId = "2284MH",
     clientSecret = "cad34dee857fd77a7408ce4d8e5e94af",
-    callbackUrl = "http://localhost:3000/callback";
+    callbackUrl = "http://192.168.1.200:3000/callback";
 
 app.set('view engine', 'pug');
 
@@ -192,8 +192,7 @@ app.get('/', function(req, res) {
             title: 'Hey',
             message: 'Hello there!',
             fitApiStatus: getFitApiStatus(),
-            lastHeartRate: heartRate,
-            lastFetchHeartRateTime: lastFetchHeartRateTime
+            lastHeartRate: heartRate
         });
 });
 
