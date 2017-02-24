@@ -2,7 +2,8 @@
 var express = require("express"),
     https = require('https'),
     app = express(),
-    request = require('request');
+    request = require('request'),
+    _ = require("lodash"),
     clientId = "2284MH",
     clientSecret = "cad34dee857fd77a7408ce4d8e5e94af",
     callbackUrl = "http://localhost:3000/callback";
@@ -12,6 +13,7 @@ app.set('view engine', 'pug');
 
 var code;
 var heartRate;
+var heartRateData = [];
 var userId;
 var accessToken;
 
@@ -26,6 +28,17 @@ var fetchProfile = function(accessToken, response) {
             response.send(results[0]);
         }
     })
+}
+
+var appendNewHeartRateData = function(data) {
+    var datapoints = data["activities-heart-intraday"]["dataset"];
+    heartRateData.concat(datapoints);
+    heartRateData = _.uniqBy(heartRateData, "time");
+}
+
+var updateHeartRate = function() {
+    if (heartRateData.length < 2) return;
+    heartRate = heartRateData[0].value;
 }
 
 var fetchHeartRate = function(accessToken, response) {
@@ -44,7 +57,6 @@ var fetchHeartRate = function(accessToken, response) {
             `/activities/heart/date/today/1d/1sec/time/${startTime}/${endTime}.json`,
             accessToken
         ).then(function(results) {
-            heartRate = results[0];
             if (response){
                 response.send(heartRate);
             }
