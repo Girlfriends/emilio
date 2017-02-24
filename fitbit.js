@@ -4,28 +4,31 @@ var express = require("express"),
     app = express(),
     request = require('request'),
     _ = require("lodash"),
+    Hue = require("./hue.js"),
     clientId = "2284MH",
     clientSecret = "cad34dee857fd77a7408ce4d8e5e94af",
     callbackUrl = "http://localhost:3000/callback";
-
 
 app.set('view engine', 'pug');
 
 var code;
 var heartRate;
 var heartRateData = [];
+var sleepData = [];
 var userId;
 var accessToken;
+var refreshToken;
 var isFetching = false;
 var updateActive = false;
+var hue;
 
 // initialize the Fitbit API client
 var FitbitApiClient = require("fitbit-node"),
     client = new FitbitApiClient(clientId, clientSecret);
 
-var fifteenMinutesAgo = function() {
+var minutesAgo = function(ago) {
     var d = new Date();
-    d.setMinutes(d.getMinutes() - 15);
+    d.setMinutes(d.getMinutes() - ago);
     return d;
 }
 
@@ -35,7 +38,7 @@ var fetchProfile = function(accessToken, response) {
         if (response) {
             response.send(results[0]);
         }
-    })
+    });
 }
 
 var appendNewHeartRateData = function(data) {
@@ -44,13 +47,19 @@ var appendNewHeartRateData = function(data) {
     heartRateData = _.uniqBy(heartRateData, "time");
 }
 
-var updateHeartRate = function() {
+var appendNewSleepData = function(data) {
     debugger;
+    var datapoints = data["activities-heart-intraday"]["dataset"];
+    heartRateData = heartRateData.concat(datapoints);
+    heartRateData = _.uniqBy(heartRateData, "time");
+}
+
+var updateHeartRate = function() {
     updateActive = true;
     if (heartRateData.length < 10) {
         var lastDataPointTime = new Date();
         // if we have heart rate data already
-        if (heartRateData) {
+        if (heartRateData.length !== 0) {
             // get data from the last point we have
             var lastDataTimeComponents = heartRateData[heartRateData.length - 1].time.split(':');
             lastDataPointTime.setHours(lastDataTimeComponents[0]);
@@ -75,6 +84,7 @@ var updateHeartRate = function() {
         return;
     }
     heartRate = heartRateData[0].value;
+    hue.heartRate = heartRate;
     console.log('updateHeartRate heart rate: ' + heartRate);
     var currTimeComponents = heartRateData[0].time.split(':');
     var nextTimeComponents = heartRateData[1].time.split(':');
@@ -116,22 +126,35 @@ var fetchHeartRate = function(startTimeDate) {
     }
 }
 
-// awake/asleep
-    // heart rate
-    // asleep - awake, restless, asleep
+var refreshAccessToken = function() {
+    console.log("Refreshing access token");
+    if (!accessToken) {
+        console.log("No access token to refresh!");
+    } else {
+        client.refreshAccessToken(accessToken, refreshToken).then(function (result) {
+            console.log("Access token refreshed");
+            console.log(result);
+        }, function(result) {
+            console.log("Failed to refresh access token");
+            console.log(result);
+        })
+    }
+}
 
-// var refreshAccessToken = function() {
-//     console.log("Refreshing access token");
-//     if (!accessToken) {
-//         console.log("No access token to refresh!");
-//     }
-// }
+var restartHue = function() {
+    console.log("Starting hue");
+    hue.searchForHueBridge().then(function(result) {
+        hue.isAnimating = true;
+    }, function(err) {
+        console.log(err);
+    });
+}
 
 // redirect the user to the Fitbit authorization page
 app.get("/authorize", function (req, res) {
     // request access to the user's activity, heartrate, location, nutrion, profile, settings, sleep, social, and weight scopes
     console.log('Authorizing...');
-    res.redirect(client.getAuthorizeUrl('heartrate sleep', callbackUrl));
+    res.redirect(client.getAuthorizeUrl('activity heartrate sleep', callbackUrl));
 });
 
 // handle the callback from the Fitbit authorization flow
@@ -142,10 +165,9 @@ app.get("/callback", function (req, res) {
         // use the access token to fetch the user's profile information
         console.log('Access token requested');
         accessToken = result.access_token;
-        fetchHeartRate(fifteenMinutesAgo()).then(function(wrappedData) {
+        refreshToken = result.refresh_token;
+        fetchHeartRate(minutesAgo(15)).then(function(wrappedData) {
             var data = wrappedData[0];
-            // console.dir(data);
-            debugger;
             appendNewHeartRateData(data);
             updateHeartRate();
             res.send(data);
@@ -178,5 +200,8 @@ app.get('/', function(req, res) {
 // launch the server
 app.listen(3000, function(){
     console.log('example app listening on port 3000!');
-    // setInterval(refreshAccessToken, 2500);
+    // setInterval(refreshAccessToken, 5000);
+    hue = new Hue();
+    hue.on("crash", restartHue);
+    restartHue();
 });
