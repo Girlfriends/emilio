@@ -16,10 +16,18 @@ var heartRate;
 var heartRateData = [];
 var userId;
 var accessToken;
+var isFetching = false;
+var updateActive = false;
 
 // initialize the Fitbit API client
 var FitbitApiClient = require("fitbit-node"),
     client = new FitbitApiClient(clientId, clientSecret);
+
+var fifteenMinutesAgo = function() {
+    var d = new Date();
+    d.setMinutes(d.getMinutes() - 15);
+    return d;
+}
 
 var fetchProfile = function(accessToken, response) {
     client.get('/profile.json', accessToken).then(function(results){
@@ -32,34 +40,78 @@ var fetchProfile = function(accessToken, response) {
 
 var appendNewHeartRateData = function(data) {
     var datapoints = data["activities-heart-intraday"]["dataset"];
-    heartRateData.concat(datapoints);
+    heartRateData = heartRateData.concat(datapoints);
     heartRateData = _.uniqBy(heartRateData, "time");
 }
 
 var updateHeartRate = function() {
-    if (heartRateData.length < 2) return;
+    debugger;
+    updateActive = true;
+    if (heartRateData.length < 10) {
+        var lastDataPointTime = new Date();
+        // if we have heart rate data already
+        if (heartRateData) {
+            // get data from the last point we have
+            var lastDataTimeComponents = heartRateData[heartRateData.length - 1].time.split(':');
+            lastDataPointTime.setHours(lastDataTimeComponents[0]);
+            lastDataPointTime.setMinutes(lastDataTimeComponents[1]);
+            lastDataPointTime.setSeconds(lastDataTimeComponents[2]);
+        } else {
+            // get data from fifteen minutes ago
+            lastDataPointTime.setMinutes(lastDataPointTime.getMinutes() - 15);
+        }
+        fetchHeartRate(lastDataPointTime).then(function(wrappedData) {
+            var data = wrappedData[0];
+            appendNewHeartRateData(data);
+            if (!updateActive) {
+                updateHeartRate();
+            }
+        }, function(err) {
+            console.log(err);
+        });
+    }
+    if (heartRateData.length < 2) {
+        updateActive = false;
+        return;
+    }
     heartRate = heartRateData[0].value;
+    console.log('updateHeartRate heart rate: ' + heartRate);
+    var currTimeComponents = heartRateData[0].time.split(':');
+    var nextTimeComponents = heartRateData[1].time.split(':');
+    if (nextTimeComponents[0] < currTimeComponents[0]) {
+        nextTimeComponents[0] += 24;
+    }
+    // compute number of seconds in each one
+    var currTimeSeconds = currTimeComponents[0] * 3600 + currTimeComponents[1] * 60 + currTimeComponents[2];
+    var nextTimeSeconds = nextTimeComponents[0] * 3600 + nextTimeComponents[1] * 60 + nextTimeComponents[2];
+    var waitTime = nextTimeSeconds - currTimeSeconds;
+    heartRateData.splice(0,1);
+    setTimeout(updateHeartRate, waitTime * 1000);
 }
 
-var fetchHeartRate = function(accessToken, response) {
+var fetchHeartRate = function(startTimeDate) {
     console.log('Pulling heart rate');
+    if (isFetching) {
+        return new Promise(function(resolve, reject) {
+            reject('Already pulling heart rate.')
+        });
+    }
     var now = new Date();
-    var fifteenMinsAgo = new Date();
-    fifteenMinsAgo.setMinutes(fifteenMinsAgo.getMinutes() - 15);
-    var startTime = `${fifteenMinsAgo.getHours()}:${fifteenMinsAgo.getMinutes()}`;
+    var startTime = `${startTimeDate.getHours()}:${startTimeDate.getMinutes()}`;
     var endTime = `${now.getHours()}:${now.getMinutes()}`;
     if (!accessToken) {
-        console.log('Not yet authenticated.');
-        return;
+        return new Promise(function(resolve, reject) {
+            reject('Not yet authenticated.');
+        });
     } else {
-        client.get(
-            // '/activities/heart/date/2017-02-11/2017-02-13/1sec.json',
+        console.log('Sending heart rate request');
+        isFetching = true;
+        return client.get(
             `/activities/heart/date/today/1d/1sec/time/${startTime}/${endTime}.json`,
             accessToken
         ).then(function(results) {
-            if (response){
-                response.send(heartRate);
-            }
+            isFetching = false;
+            return results;
         });
     }
 }
@@ -79,11 +131,7 @@ var fetchHeartRate = function(accessToken, response) {
 app.get("/authorize", function (req, res) {
     // request access to the user's activity, heartrate, location, nutrion, profile, settings, sleep, social, and weight scopes
     console.log('Authorizing...');
-    res.redirect(client.getAuthorizeUrl('activity heartrate location nutrition profile settings sleep social weight', callbackUrl));
-});
-
-app.get('/heartrate', function(req, res) {
-    fetchHeartRate(accessToken, res);
+    res.redirect(client.getAuthorizeUrl('heartrate sleep', callbackUrl));
 });
 
 // handle the callback from the Fitbit authorization flow
@@ -94,7 +142,16 @@ app.get("/callback", function (req, res) {
         // use the access token to fetch the user's profile information
         console.log('Access token requested');
         accessToken = result.access_token;
-        fetchHeartRate(accessToken, res);
+        fetchHeartRate(fifteenMinutesAgo()).then(function(wrappedData) {
+            var data = wrappedData[0];
+            // console.dir(data);
+            debugger;
+            appendNewHeartRateData(data);
+            updateHeartRate();
+            res.send(data);
+        }, function(err) {
+            res.send(err);
+        });
     }).catch(function (error) {
         res.send(error);
     });
@@ -121,7 +178,5 @@ app.get('/', function(req, res) {
 // launch the server
 app.listen(3000, function(){
     console.log('example app listening on port 3000!');
-    // fetchHeartRate();
-    setInterval(fetchHeartRate, 15000 * 60);
     // setInterval(refreshAccessToken, 2500);
 });
