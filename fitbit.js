@@ -8,7 +8,7 @@ var express = require("express"),
     Hue = require("./hue.js"),
     clientId = "2284MH",
     clientSecret = "cad34dee857fd77a7408ce4d8e5e94af",
-    callbackUrl = "http://192.168.1.200:3000/callback";
+    callbackUrl = "http://localhost:3000/callback";
 
 app.set('view engine', 'pug');
 
@@ -153,7 +153,6 @@ var fetchHeartRate = function(startTimeDate) {
 }
 
 var sleepDataForTime = function(date) {
-    debugger;
     var fitbitDate = dateFormat(date, "yyyy-mm-dd");
 
     var sleepLog = null;
@@ -183,7 +182,20 @@ var sleepDataForTime = function(date) {
     var datum = _.find(sleepLog.minuteData, function(d) {return d.dateTime === hms});
     if (!datum) return hue.USER_STATES.DAY;
 
-    return datum.value;
+    var sleepState = hue.USER_STATES.DAY;
+    switch (datum) {
+        case 1:
+            sleepState = hue.USER_STATES.ASLEEP;
+            break;
+        case 2:
+            sleepState = hue.USER_STATES.RESTLESS;
+            break;
+        case 3:
+            sleepState = hue.USER_STATES.AWAKE;
+            break;
+    }
+
+    return sleepState;
 }
 
 var clearSleepDataBefore = function(date) {
@@ -300,8 +312,6 @@ app.get("/callback", function (req, res) {
 
 app.get('/sleep', function (req, res) {
     var date = now();
-    debugger;
-    date.setHours(-6);
     res.send(sleepDataForTime(date));
 })
 
@@ -332,4 +342,7 @@ app.listen(3000, function(){
 
     refreshSleepData();
     setInterval(refreshSleepData, 60000 * 5);
+
+    updateSleepData();
+    setInterval(updateSleepData, 60000 * 1);
 });
