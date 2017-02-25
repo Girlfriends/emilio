@@ -4,6 +4,7 @@ var express = require("express"),
     app = express(),
     request = require('request'),
     _ = require("lodash"),
+    dateFormat = require("dateformat"),
     Hue = require("./hue.js"),
     clientId = "2284MH",
     clientSecret = "cad34dee857fd77a7408ce4d8e5e94af",
@@ -14,11 +15,12 @@ app.set('view engine', 'pug');
 var code;
 var heartRate;
 var heartRateData = [];
-var sleepData = [];
+var sleepDataByDate = {};
 var userId;
 var accessToken;
 var refreshToken;
-var isFetching = false;
+var isFetchingHeartRate = false;
+var isFetchingSleepData = false;
 var updateActive = false;
 var hue;
 
@@ -26,10 +28,27 @@ var hue;
 var FitbitApiClient = require("fitbit-node"),
     client = new FitbitApiClient(clientId, clientSecret);
 
+// Use this to set the present to some time in the past, for testing
+var now = function() {
+    return new Date();
+}
+
 var minutesAgo = function(ago) {
-    var d = new Date();
+    var d = now();
     d.setMinutes(d.getMinutes() - ago);
     return d;
+}
+
+var daysAgo = function(ago) {
+    var d = now();
+    d.setDate(d.getDate() - ago);
+    return d;
+}
+
+var setAccessToken = function(_accessToken, _refreshToken) {
+    accessToken = _accessToken;
+    refreshToken = _refreshToken;
+    refreshSleepData();
 }
 
 var fetchProfile = function(accessToken, response) {
@@ -41,6 +60,14 @@ var fetchProfile = function(accessToken, response) {
     });
 }
 
+var compareFitbitDateStrings = function(d1, d2) {
+    var d1Comp = d1.split("-");
+    var d2Comp = d2.split("-");
+    var d1a = d1[0] * 1000 + d1[1] * 100 + d1[2];
+    var d2a = d2[0] * 1000 + d2[1] * 100 + d2[2];
+    return d1 - d2;
+}
+
 var appendNewHeartRateData = function(data) {
     var datapoints = data["activities-heart-intraday"]["dataset"];
     heartRateData = heartRateData.concat(datapoints);
@@ -48,7 +75,6 @@ var appendNewHeartRateData = function(data) {
 }
 
 var appendNewSleepData = function(data) {
-    debugger;
     var datapoints = data["activities-heart-intraday"]["dataset"];
     heartRateData = heartRateData.concat(datapoints);
     heartRateData = _.uniqBy(heartRateData, "time");
@@ -101,7 +127,7 @@ var updateHeartRate = function() {
 
 var fetchHeartRate = function(startTimeDate) {
     console.log('Pulling heart rate');
-    if (isFetching) {
+    if (isFetchingHeartRate) {
         return new Promise(function(resolve, reject) {
             reject('Already pulling heart rate.')
         });
@@ -115,15 +141,116 @@ var fetchHeartRate = function(startTimeDate) {
         });
     } else {
         console.log('Sending heart rate request');
-        isFetching = true;
+        isFetchingHeartRate = true;
         return client.get(
             `/activities/heart/date/today/1d/1sec/time/${startTime}/${endTime}.json`,
             accessToken
         ).then(function(results) {
-            isFetching = false;
+            isFetchingHeartRate = false;
             return results;
         });
     }
+}
+
+var sleepDataForTime = function(date) {
+    debugger;
+    var fitbitDate = dateFormat(date, "yyyy-mm-dd");
+
+    var sleepLog = null;
+    for (var k in sleepDataByDate) {
+        if (sleepDataByDate.hasOwnProperty(k)) {
+            var sleepData = sleepDataByDate[k];
+            for (var i=0; i<sleepData.length; i++) {
+                sleepLog = sleepData[i];
+                var startDate = new Date(sleepLog.startTime);
+                var endDate = new Date(sleepLog.startTime);
+                endDate.setMinutes(endDate.getMinutes() + sleepLog.timeInBed);
+                if (date.getTime() > startDate.getTime() && date.getTime() < endDate.getTime()) {
+                    break;
+                } else {
+                    sleepLog = null;
+                }
+            }
+        }
+
+        if (sleepLog !== null) break;
+    }
+
+    if (sleepLog === null) return hue.USER_STATES.DAY;
+
+    date.setSeconds(0);
+    var hms = dateFormat(date, "hh:MM:ss");
+    var datum = _.find(sleepLog.minuteData, function(d) {return d.dateTime === hms});
+    if (!datum) return hue.USER_STATES.DAY;
+
+    return datum.value;
+}
+
+var clearSleepDataBefore = function(date) {
+    var fitbitDate = dateFormat(date, "yyyy-mm-dd");
+    var toDelete = [];
+    for (var k in sleepDataByDate) {
+        if (sleepDataByDate.hasOwnProperty(k)) {
+            if (compareFitbitDateStrings(fitbitDate, k) > 0) toDelete.push(k);
+        }
+    }
+
+    for (var i=0; i<toDelete.length; i++) delete sleepDataByDate[toDelete[i]];
+}
+
+var appendSleepDataFromResponse = function(res) {
+    // This is an array of all the sleep times for that day
+    var sleeps = res[0].sleep;
+    var sleepDate = sleeps[0].dateOfSleep;
+    sleepDataByDate[sleepDate] = [];
+
+    // For each one, make a sleep object that contains the start time, duration and sleep minutes
+    for (var i=0; i<sleeps.length; i++) {
+        var sleepData = {
+            startTime: sleeps[i].startTime,
+            timeInBed: sleeps[i].timeInBed,
+            minuteData: sleeps[i].minuteData
+        }
+
+        sleepDataByDate[sleepDate].push(sleepData);
+    }
+}
+
+var refreshSleepData = function() {
+    // Can't do anything if we aren't authenticated
+    if (!accessToken) {
+        console.log("refreshSleepData: No access token");
+        return;
+    }
+
+    // Remove unnecessary sleep data, if it exists
+    clearSleepDataBefore(daysAgo(1));
+
+    // Get yesterday's sleep data
+    fetchSleepData(daysAgo(1), appendSleepDataFromResponse);
+
+    // Update today's sleep data
+    fetchSleepData(now(), appendSleepDataFromResponse);
+}
+
+var updateSleepData = function() {
+    var currentSleepState = sleepDataForTime(minutesAgo(15));
+    hue.userState = currentSleepState;
+}
+
+var fetchSleepData = function(date, callback) {
+    if (!accessToken) {
+        console.log("fetchSleepData: No access token");
+        return;
+    }
+    console.log('Sending sleep data request');
+
+    var sleepDateStr = dateFormat(date, 'yyyy-mm-dd');
+
+    client.get(
+        `/sleep/date/${sleepDateStr}.json`,
+        accessToken
+    ).then(callback);
 }
 
 var refreshAccessToken = function() {
@@ -163,28 +290,27 @@ app.get("/callback", function (req, res) {
     console.log('Authorization callback requested');
     client.getAccessToken(req.query.code, callbackUrl).then(function (result) {
         // use the access token to fetch the user's profile information
-        console.log('Access token requested');
-        accessToken = result.access_token;
-        refreshToken = result.refresh_token;
-        fetchHeartRate(minutesAgo(15)).then(function(wrappedData) {
-            var data = wrappedData[0];
-            appendNewHeartRateData(data);
-            updateHeartRate();
-            res.send(data);
-        }, function(err) {
-            res.send(err);
-        });
+        console.log('Received access token');
+        setAccessToken(result.access_token, result.refresh_token);
+        res.send("Authorization successful. Will begin fetch heart rate and sleep data.")
     }).catch(function (error) {
         res.send(error);
     });
 });
 
+app.get('/sleep', function (req, res) {
+    var date = now();
+    debugger;
+    date.setHours(-6);
+    res.send(sleepDataForTime(date));
+})
+
 app.get('/', function(req, res) {
     var getFitApiStatus = function(){
         if (!accessToken) {
-            return 'Still authenticating'
+            return 'Still authenticating';
         } else {
-            return 'API authenticated'
+            return 'API authenticated';
         }
     }
     res.render('index',
@@ -202,6 +328,9 @@ app.listen(3000, function(){
     console.log('example app listening on port 3000!');
     // setInterval(refreshAccessToken, 5000);
     hue = new Hue();
-    hue.on("crash", restartHue);
-    restartHue();
+    // hue.on("crash", restartHue);
+    // restartHue();
+
+    refreshSleepData();
+    setInterval(refreshSleepData, 60000 * 5);
 });
