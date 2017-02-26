@@ -7,11 +7,16 @@ body
 	h1= message
 	ul
 		li.fit-api-status
-			| #{ fitApiStatus } 
-		li.fit-data-time
-			| #{ lastFetchHeartRateTime } 
-		li.fit-data-heart
-			| #{ lastHeartRate } 
-		li.fit-data-sleep
-		li.hue-bridge-status
-		li.hue-light-count
+			| #{ fitApiStatus }
+		li.fit-heart-rate
+			| #{ lastHeartRate }
+		li.fit-sleep-state
+			| #{ sleepStatus }
+		li.fit-heart-time
+			| #{ heartRateFetchTime }
+		li.fit-sleep-time
+			| #{ sleepDataFetchTime }
+		li.light-one-brightness
+			| #{ lightOneBrightness }
+		li.light-two-brightness
+			| #{ lightTwoBrightness }

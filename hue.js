@@ -44,10 +44,12 @@ module.exports = class Hue extends EventEmitter {
 			},
 			lights: [
 				{
-					state: true
+					state: true,
+					brightness: 0
 				},
 				{
-					state: false
+					state: false,
+					brightness: 0
 				}
 			]
 		};
@@ -108,6 +110,10 @@ module.exports = class Hue extends EventEmitter {
 		}).bind(this));
 	}
 
+	getLightBrightness(i) {
+		return this._hueStatus.lights[i].brightness;
+	}
+
 	searchForHueBridge() {
 		return hue.upnpSearch(5000).then(this._processSearchResult.bind(this));
 	}
@@ -121,6 +127,7 @@ module.exports = class Hue extends EventEmitter {
 			this._hueStatus.lights[i].state = !this._hueStatus.lights[i].state;
 			var brightness = this._hueStatus.lights[i].state ? this._hueStatus.dayAnimation.maxBrightness : this._hueStatus.dayAnimation.minBrightness;
 			var state = lightState.create().brightness(brightness).transition(transition);
+			this._hueStatus.lights[i].brightness = brightness;
 			this._api.setLightState(i+1, state).then().done();
 		}
 		this._hueStatus.dayAnimation.rising = !this._hueStatus.dayAnimation.rising;
@@ -134,16 +141,17 @@ module.exports = class Hue extends EventEmitter {
 				this._hueStatus.dayAnimation.midpointOrigin = 1.0 - this._hueStatus.dayAnimation.midpointOrigin;
 			}
 		}
-		setTimeout(this.animateLights.bind(this), transition);
+		setTimeout(this.animateLights.bind(this), Math.max(100, transition));
 	}
 
 	_animateAwakeRestless(maxTime, exponent) {
-		var msecInterval = Math.random() * maxTime + 100;
+		var msecInterval = Math.random() * maxTime + 200;
 		for (var i=0; i<2; i++) {
 			var transition = msecInterval * Math.pow(Math.random(), exponent);
 			this._hueStatus.lights[i].state = !this._hueStatus.lights[i].state;
 			var brightness = 100 * ((this._hueStatus.lights[i].state ? 0.5 : 0) + Math.random() * 0.5);
 			var state = lightState.create().brightness(brightness).transition(transition);
+			this._hueStatus.lights[i].brightness = brightness;
 			this._api.setLightState(i + 1, state).then().done();
 		}
 		setTimeout(this.animateLights.bind(this), msecInterval);
@@ -158,10 +166,11 @@ module.exports = class Hue extends EventEmitter {
 	}
 
 	animateAsleep() {
-		var msecInterval = 100;
+		var msecInterval = 200;
 		for (var i=0; i<2; i++) {
 			var brightness = Math.pow(Math.random(), this._hueStatus.asleepAnimation.exponent) * 100;
 			var state = lightState.create().brightness(brightness).transition(0);
+			this._hueStatus.lights[i].brightness = brightness;
 			this._api.setLightState(i+1, state).then().done();
 		}
 		setTimeout(this.animateLights.bind(this), msecInterval);
