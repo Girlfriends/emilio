@@ -7,9 +7,16 @@ var express = require("express"),
     dateFormat = require("dateformat"),
     Hue = require("./hue.js"),
     clientId = "2284MH",
-    clientSecret = "cad34dee857fd77a7408ce4d8e5e94af",
-    callbackUrl = "http://localhost:3000/callback";
+    clientSecret = "cad34dee857fd77a7408ce4d8e5e94af";
+var hostname;
+if (process.env.NODE_ENV === "production") {
+    hostname = "http://192.168.1.200:3000";
+} else {
+    hostname = "http://localhost:3000";
+}
+var callbackUrl = `${hostname}/callback`;
 
+var logger = require("./logger.js");
 app.set('view engine', 'pug');
 
 var code;
@@ -148,16 +155,15 @@ var makeHeartDataRequestIfNeeded = function(force) {
                         updateHeartRate();
                     }
                 } else {
-                    console.log("Requested heart rate data, but didn't get any");
-                    debugger;
+                    logger.warn("Requested heart rate data, but didn't get any");
                 }
             } else {
-                console.log("Requested heart rate data, but it was badly formatted");
-                console.log(data);
+                logger.warn("Requested heart rate data, but it was badly formatted");
+                logger.warn(data);
             }
         }, function(error) {
-            console.log("Error requesting heart rate data");
-            console.log(error);
+            logger.error("Error requesting heart rate data");
+            logger.error(error);
         });
     }
 }
@@ -184,17 +190,17 @@ var updateHeartRate = function() {
     var currTimeSeconds = currTimeComponents[0] * 3600 + currTimeComponents[1] * 60 + currTimeComponents[2];
     var nextTimeSeconds = nextTimeComponents[0] * 3600 + nextTimeComponents[1] * 60 + nextTimeComponents[2];
     var waitTime = nextTimeSeconds - currTimeSeconds;
-    console.log('updateHeartRate time: ' + heartRateData[0].time);
-    console.log('updateHeartRate heart rate: ' + heartRate);
-    console.log('updateHeartRate next update in: ' + waitTime);
+    logger.info('updateHeartRate time: ' + heartRateData[0].time);
+    logger.info('updateHeartRate heart rate: ' + heartRate);
+    logger.info('updateHeartRate next update in: ' + waitTime);
     heartRateData.splice(0,1);
     setTimeout(updateHeartRate, waitTime * 1000);
 }
 
 var fetchHeartRate = function(startTimeDate, successCallback, errorCallback) {
-    console.log('fetchHeartRate: ' + startTimeDate);
+    logger.info('fetchHeartRate: ' + startTimeDate);
     if (!accessToken) {
-        console.log("fetchHeartRate: Not yet authorized.");
+        logger.error("fetchHeartRate: Not yet authorized.");
         errorCallback("Not yet authorized");
         return;
     }
@@ -204,7 +210,7 @@ var fetchHeartRate = function(startTimeDate, successCallback, errorCallback) {
     var endTime = dateFormat(thisMoment, "hh:MM");
     var startDate = dateFormat(startTimeDate, "yyyy-mm-dd");
     var path = `/activities/heart/date/${startDate}/1d/1sec/time/${startTime}/${endTime}.json`
-    console.log('Sending heart rate request');
+    logger.info('Sending heart rate request');
     client.get(path, accessToken).then(successCallback, errorCallback);
 }
 
@@ -270,7 +276,7 @@ var clearSleepDataBefore = function(date) {
 
 var appendSleepDataFromResponse = function(res) {
 
-    console.log("Received sleep data");
+    logger.info("Received sleep data");
     // This is an array of all the sleep times for that day
     var sleeps = res[0].sleep;
     var sleepDate = sleeps[0].dateOfSleep;
@@ -291,7 +297,7 @@ var appendSleepDataFromResponse = function(res) {
 var refreshSleepData = function() {
     // Can't do anything if we aren't authorized
     if (!accessToken) {
-        console.log("refreshSleepData: No access token");
+        logger.error("refreshSleepData: No access token");
         return;
     }
 
@@ -299,7 +305,7 @@ var refreshSleepData = function() {
     clearSleepDataBefore(daysAgo(1));
 
     var printError = function(err) {
-        console.log("Error fetching sleep data");
+        logger.error("Error fetching sleep data");
         console.log(err);
     }
 
@@ -322,11 +328,11 @@ var updateSleepData = function() {
 
 var fetchSleepData = function(date, successCallback, errorCallback) {
     if (!accessToken) {
-        console.log("fetchSleepData: No access token");
+        logger.error("fetchSleepData: No access token");
         errorCallback("fetchSleepData: No access token");
         return;
     }
-    console.log('Sending sleep data request');
+    logger.info('Sending sleep data request');
 
     lastSleepDataRequestTime = new Date();
     var sleepDateStr = dateFormat(date, 'yyyy-mm-dd');
@@ -340,29 +346,29 @@ var fetchSleepData = function(date, successCallback, errorCallback) {
 ////////////////// RUN LOOP //////////////////////////
 
 var refreshAccessToken = function() {
-    console.log("Refreshing access token");
+    logger.info("Refreshing access token");
     if (!accessToken) {
-        console.log("No access token to refresh!");
+        logger.error("No access token to refresh!");
     } else {
         client.refreshAccessToken(accessToken, refreshToken).then(function (result) {
-            console.log("Access token refreshed");
+            logger.info("Access token refreshed");
             accessToken = result.access_token;
             refreshToken = result.refresh_token;
             expiresAt = result.expires_at;
         }, function(result) {
-            console.log("Failed to refresh access token");
-            console.log(result.stack);
+            logger.error("Failed to refresh access token");
+            logger.error(result.stack);
         });
     }
 }
 
 var revokeAccessToken = function() {
-    console.log("Revoking access token");
+    logger.info("Revoking access token");
     if (!accessToken) {
-        console.log("No access token to revoke");
+        logger.error("No access token to revoke");
     } else {
         client.revokeAccessToken(accessToken).then(function (result) {
-            console.log("Access token revoked!");
+            logger.info("Access token revoked!");
             accessToken = undefined;
             refreshToken = undefined;
         });
@@ -370,29 +376,29 @@ var revokeAccessToken = function() {
 }
 
 var restartHue = function() {
-    console.log("Starting hue");
+    logger.info("Starting hue");
     hue.isAnimating = false;
     hue.searchForHueBridge().then(function(result) {
         hue.isAnimating = true;
     }, function(err) {
-        console.log(err);
+        logger.error(err);
     });
 }
 
 // redirect the user to the Fitbit authorization page
 app.get("/authorize", function (req, res) {
     // request access to the user's activity, heartrate, location, nutrion, profile, settings, sleep, social, and weight scopes
-    console.log('Authorizing...');
+    logger.info('Authorizing...');
     res.redirect(client.getAuthorizeUrl('activity heartrate sleep', callbackUrl));
 });
 
 // handle the callback from the Fitbit authorization flow
 app.get("/callback", function (req, res) {
     // exchange the authorization code we just received for an access token
-    console.log('Authorization callback requested');
+    logger.info('Authorization callback requested');
     client.getAccessToken(req.query.code, callbackUrl).then(function (result) {
         // use the access token to fetch the user's profile information
-        console.log('Received access token');
+        logger.info('Received access token');
         setAccessToken(result.access_token, result.refresh_token);
         res.redirect("/");
     }).catch(function (error) {
@@ -466,8 +472,8 @@ app.get('/', function(req, res) {
 
 // launch the server
 app.listen(3000, function(){
-    console.log('FitBit-Hue listening on 3000!');
-    console.log('Visit 192.168.1.200:3000/ to authorize');
+    logger.info('FitBit-Hue listening on 3000!');
+    logger.info(`Visit ${hostname}/authorize to authorize`);
     setInterval(refreshAccessToken, 15000);
     hue = new Hue();
     hue.on("crash", restartHue);

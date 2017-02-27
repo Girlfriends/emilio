@@ -24,6 +24,7 @@
     "node-hue-api": "^2.4.1",
     "node-osc": "^2.0.4",
     "pug": "^0.1.0",
-    "request": "^2.79.0"
+    "request": "^2.79.0",
+    "winston": "^2.3.1"
   }
 }

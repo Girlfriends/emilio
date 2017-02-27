@@ -10,6 +10,8 @@ var credentials = fs.readFileSync('credentials.json', 'utf8');
 var jsonCredentials = JSON.parse(credentials);
 var EventEmitter = require('events');
 
+var logger = require('./logger.js');
+
 module.exports = class Hue extends EventEmitter {
 	get USER_STATES() {
 		return {
@@ -64,7 +66,7 @@ module.exports = class Hue extends EventEmitter {
 	}
 
 	set heartRate(hr) {
-		console.log("Setting heart rate to " + hr);
+		logger.info("Setting heart rate to " + hr);
 		this._heartRate = hr;
 	}
 
@@ -92,19 +94,19 @@ module.exports = class Hue extends EventEmitter {
 	}
 
 	_displayResult(result) {
-		console.log(JSON.stringify(result, null, 2));
+		logger.info(JSON.stringify(result, null, 2));
 	}
 
 	_processSearchResult(bridge) {
 		return new Promise((function(resolve, reject) {
 			if (!bridge.length || !bridge[0]) {
-				console.log('No bridges found.');
+				logger.warning('No bridges found.');
 				reject('No bridges found.');
 			} else {
-				console.log("Hue Bridges Found: " + JSON.stringify(bridge));
-				console.log('Creating API');
+				logger.info("Hue Bridges Found: " + JSON.stringify(bridge));
+				logger.info('Creating API');
 				this._api = this._createApi(bridge[0]);
-				console.log('API created.');
+				logger.info('API created.');
 				resolve(this._api);
 			}
 		}).bind(this));
@@ -195,8 +197,8 @@ module.exports = class Hue extends EventEmitter {
 					break;
 			}
 		} catch (e) {
-			console.log("Hue crashed");
-			console.log(e);
+			logger.error("Hue crashed");
+			logger.error(e);
 			this.emit("crash");
 		}
 	}
