@@ -412,8 +412,26 @@ app.get('/resetHue', function(req, res) {
     res.redirect('/?' + encodeURIComponent("message=Hue reset"));
 });
 
-app.get('/sleep', function (req, res) {
-    res.send(JSON.stringify(sleepDataByDate));
+app.get('/setSleepState', function (req, res) {
+    var state = parseInt(req.query.state);
+    if (state !== undefined && !isNaN(state)) {
+        var sleepState = hue.USER_STATES.DAY;
+        switch (state) {
+            case 1:
+                sleepState = hue.USER_STATES.ASLEEP;
+                break;
+            case 2:
+                sleepState = hue.USER_STATES.RESTLESS;
+                break;
+            case 3:
+                sleepState = hue.USER_STATES.AWAKE;
+                break;
+        }
+        hue.userState = sleepState;
+        res.redirect("/?message=" + encodeURIComponent("Forcing sleep state " + displayStringForUserState(hue.userState)));
+    } else {
+        res.redirect("/?message=" + encodeURIComponent("Must include sleep state as query string param"));
+    }
 });
 
 app.get('/heartrate', function (req, res) {

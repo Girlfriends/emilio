@@ -23,6 +23,16 @@ body
 			| Heart rate data fetched at: #{ heartRateFetchTime }
 		li.fit-sleep-time
 			| Sleep data fetched at: #{ sleepDataFetchTime }
+		li.set-sleep-state
+			| Set sleep state
+			| 
+			a(href="/setSleepState?state=0") Awake
+			| 
+			a(href="/setSleepState?state=3") In bed, awake
+			| 
+			a(href="/setSleepState?state=2") In bed, restless
+			| 
+			a(href="/setSleepState?state=1") Asleep
 		li.hue-status
 			if hueStatus
 				| Hue Connected!
