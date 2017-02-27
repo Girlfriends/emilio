@@ -320,8 +320,8 @@ var updateSleepData = function() {
     if (forcedSleepState === undefined) {
         var sleepTime = minutesAgo(15);
         var currentSleepState = sleepDataForTime(sleepTime);
-        console.log("updateSleepData time: " + sleepTime);
-        console.log("updateSleepData state: " + currentSleepState);
+        logger.info("updateSleepData time: " + sleepTime);
+        logger.info("updateSleepData state: " + currentSleepState);
         hue.userState = currentSleepState;
     }
 }
