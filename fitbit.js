@@ -311,7 +311,7 @@ var refreshSleepData = function() {
 }
 
 var updateSleepData = function() {
-    if (forcedSleepState !== undefined) {
+    if (forcedSleepState === undefined) {
         var sleepTime = minutesAgo(15);
         var currentSleepState = sleepDataForTime(sleepTime);
         console.log("updateSleepData time: " + sleepTime);
