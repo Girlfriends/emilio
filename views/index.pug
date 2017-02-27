@@ -11,6 +11,8 @@ body
 				FitBit Authorized!
 			else
 				FitBit Not Authorized. a("/authorize") Click here to authorize
+		li.active-since
+			| Active since: #{ startTime }
 		li.fit-heart-rate
 			| Current heart rate: #{ lastHeartRate }
 		li.fit-sleep-state

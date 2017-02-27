@@ -358,6 +358,8 @@ var revokeAccessToken = function() {
     } else {
         client.revokeAccessToken(accessToken).then(function (result) {
             console.log("Access token revoked!");
+            accessToken = undefined;
+            refreshToken = undefined;
         });
     }
 }
@@ -395,12 +397,12 @@ app.get("/callback", function (req, res) {
 
 app.get('/revoke', function(req, res) {
     revokeAccessToken();
-    res.redirect(encodeURIComponent("/?message=Access token revoked"));
+    res.redirect("/?message=" + encodeURIComponent("Access token revoked"));
 });
 
 app.get('/resetHue', function(req, res) {
     restartHue();
-    res.redirect(encodeURIComponent("/?message=Hue reset"));
+    res.redirect("/?message=" + encodeURIComponent("Hue reset"));
 });
 
 app.get('/sleep', function (req, res) {
@@ -419,6 +421,7 @@ app.get('/', function(req, res) {
         {
             title: 'FitBit-Hue: Dashboard',
             message: req.query.message,
+            startTime: startTime,
             fitApiStatus: getFitApiStatus(),
             lastHeartRate: hue.heartRate,
             sleepStatus: displayStringForUserState(hue.userState),
@@ -431,18 +434,21 @@ app.get('/', function(req, res) {
 
 // launch the server
 app.listen(3000, function(){
-    console.log('example app listening on port 3000!');
+    console.log('FitBit-Hue listening on 3000!');
+    console.log('Visit 192.168.1.200:3000/ to authorize');
     setInterval(refreshAccessToken, 15000);
     hue = new Hue();
-    // hue.on("crash", restartHue);
-    // restartHue();
-    // setInterval(restartHue, 60000 * 30);
+    hue.on("crash", restartHue);
+    restartHue();
+    setInterval(restartHue, 60000 * 30);
+
+    startTime = new Date();
 
     setInterval(makeSureHeartDataIsActive, 60000 * 1);
 
-    // refreshSleepData();
-    // setInterval(refreshSleepData, 60000 * 5);
+    refreshSleepData();
+    setInterval(refreshSleepData, 60000 * 5);
 
-    // updateSleepData();
-    // setInterval(updateSleepData, 60000 * 1);
+    updateSleepData();
+    setInterval(updateSleepData, 60000 * 1);
 });
