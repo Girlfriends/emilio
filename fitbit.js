@@ -376,11 +376,7 @@ app.get('/heartrate', function (req, res) {
 
 app.get('/', function(req, res) {
     var getFitApiStatus = function(){
-        if (!accessToken) {
-            return '<strong>Not yet authorized</strong> <a href="/authorize">Click here to authorize</a>';
-        } else {
-            return 'API authenticated <strong>&lt;3</strong>';
-        }
+        return accessToken !== undefined;
     }
     res.render('index',
         {

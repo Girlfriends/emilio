@@ -7,7 +7,10 @@ body
 	h1= message
 	ul
 		li.fit-api-status
-			| #{ fitApiStatus }
+			if fitApiStatus
+				FitBit Authorized!
+			else
+				FitBit Not Authorized. a("/authorize") Click here to authorize
 		li.fit-heart-rate
 			| #{ lastHeartRate }
 		li.fit-sleep-state
