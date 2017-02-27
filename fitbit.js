@@ -71,8 +71,8 @@ var fetchProfile = function(accessToken, response) {
 var compareFitbitDateStrings = function(d1, d2) {
     var d1Comp = d1.split("-");
     var d2Comp = d2.split("-");
-    var d1a = d1[0] * 1000 + d1[1] * 100 + d1[2] * 1;
-    var d2a = d2[0] * 1000 + d2[1] * 100 + d2[2] * 1;
+    var d1a = d1Comp[0] * 1000 + d1Comp[1] * 100 + d1Comp[2] * 1;
+    var d2a = d2Comp[0] * 1000 + d2Comp[1] * 100 + d2Comp[2] * 1;
     return d1a - d2a;
 }
 
@@ -80,8 +80,8 @@ var compareFitbitTimeStrings = function(t1, t2) {
     var t1Comp = t1.split(":");
     var t2Comp = t2.split(":");
     if (t1Comp[0] - t2Comp[0] > 12) t2Comp[0] += 24;
-    var t1a = t1[0] * 3600 + t1[1] * 60 + t1[2] * 1;
-    var t2a = t2[0] * 3600 + t2[1] * 60 + t2[2] * 1;
+    var t1a = t1Comp[0] * 3600 + t1Comp[1] * 60 + t1Comp[2] * 1;
+    var t2a = t2Comp[0] * 3600 + t2Comp[1] * 60 + t2Comp[2] * 1;
     return t1a - t2a;
 }
 
@@ -109,7 +109,7 @@ var appendNewHeartRateData = function(datapoints) {
         var lastTime = heartRateData[heartRateData.length - 1].time;
         for (var i=0; i<datapoints.length; i++) {
             var pointTime = datapoints[i].time;
-            if (compareFitbitDateStrings(pointTime, lastTime) > 0) heartRateData.push(datapoints[i]);
+            if (compareFitbitTimeStrings(pointTime, lastTime) > 0) heartRateData.push(datapoints[i]);
         }
     }
 }
@@ -120,11 +120,11 @@ var makeSureHeartDataIsActive = function() {
     if (!heartRateUpdateActive) makeHeartDataRequestIfNeeded();
 }
 
-var makeHeartDataRequestIfNeeded = function() {
-    if (heartRateData.length < 10) {
+var makeHeartDataRequestIfNeeded = function(force) {
+    if (force || heartRateData.length < 10) {
         var lastDataPointTime = now();
         // if we have heart rate data already
-        if (heartRateData.length !== 0) {
+        if (false && heartRateData.length !== 0) {
             // get data from the last point we have
             var lastDataTimeComponents = heartRateData[heartRateData.length - 1].time.split(':');
             lastDataPointTime.setHours(lastDataTimeComponents[0]);
@@ -132,7 +132,7 @@ var makeHeartDataRequestIfNeeded = function() {
             lastDataPointTime.setSeconds(lastDataTimeComponents[2]);
         } else {
             // get data from fifteen minutes ago
-            lastDataPointTime.setMinutes(lastDataPointTime.getMinutes() - 15);
+            lastDataPointTime.setMinutes(lastDataPointTime.getMinutes() - 25);
         }
 
         lastHeartRateRequestTime = new Date();
@@ -197,6 +197,7 @@ var fetchHeartRate = function(startTimeDate, successCallback, errorCallback) {
         return;
     }
     var thisMoment = now();
+    // thisMoment.setMinutes(thisMoment.getMinutes() + 15);
     var startTime = dateFormat(startTimeDate, "hh:MM");
     var endTime = dateFormat(thisMoment, "hh:MM");
     var startDate = dateFormat(startTimeDate, "yyyy-mm-dd");
@@ -393,6 +394,11 @@ app.get("/callback", function (req, res) {
     }).catch(function (error) {
         res.send(error);
     });
+});
+
+app.get("/fetchHeartRate", function(req, res) {
+    makeHeartDataRequestIfNeeded(true);
+    res.redirect("/?message=" + encodeURIComponent("Force fetching heart rate data"));
 });
 
 app.get('/revoke', function(req, res) {
