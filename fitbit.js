@@ -16,6 +16,7 @@ var code;
 var heartRate;
 var heartRateData = [];
 var sleepDataByDate = {};
+var forcedSleepState;
 var lastHeartRateRequestTime;
 var lastSleepDataRequestTime;
 var userId;
@@ -310,11 +311,13 @@ var refreshSleepData = function() {
 }
 
 var updateSleepData = function() {
-    var sleepTime = minutesAgo(15);
-    var currentSleepState = sleepDataForTime(sleepTime);
-    console.log("updateSleepData time: " + sleepTime);
-    console.log("updateSleepData state: " + currentSleepState);
-    hue.userState = currentSleepState;
+    if (forcedSleepState !== undefined) {
+        var sleepTime = minutesAgo(15);
+        var currentSleepState = sleepDataForTime(sleepTime);
+        console.log("updateSleepData time: " + sleepTime);
+        console.log("updateSleepData state: " + currentSleepState);
+        hue.userState = currentSleepState;
+    }
 }
 
 var fetchSleepData = function(date, successCallback, errorCallback) {
@@ -427,10 +430,13 @@ app.get('/setSleepState', function (req, res) {
                 sleepState = hue.USER_STATES.AWAKE;
                 break;
         }
+        forcedSleepState = sleepState;
         hue.userState = sleepState;
         res.redirect("/?message=" + encodeURIComponent("Forcing sleep state " + displayStringForUserState(hue.userState)));
     } else {
-        res.redirect("/?message=" + encodeURIComponent("Must include sleep state as query string param"));
+        forcedSleepState = undefined;
+        updateSleepData();
+        res.redirect("/?message=" + encodeURIComponent("Sleep state unforced"));
     }
 });
 
