@@ -114,6 +114,12 @@ var appendNewHeartRateData = function(datapoints) {
     }
 }
 
+// This is just to make sure that an error doesn't cause heart rate data to end up in a broken state
+// because of an error
+var makeSureHeartDataIsActive = function() {
+    if (!heartRateUpdateActive) makeHeartDataRequestIfNeeded();
+}
+
 var makeHeartDataRequestIfNeeded = function() {
     if (heartRateData.length < 10) {
         var lastDataPointTime = now();
@@ -128,6 +134,8 @@ var makeHeartDataRequestIfNeeded = function() {
             // get data from fifteen minutes ago
             lastDataPointTime.setMinutes(lastDataPointTime.getMinutes() - 15);
         }
+
+        lastHeartRateRequestTime = new Date();
         fetchHeartRate(lastDataPointTime, function(wrappedData) {
             var data = wrappedData[0];
             if (data.hasOwnProperty("activities-heart-intraday") &&
@@ -145,18 +153,16 @@ var makeHeartDataRequestIfNeeded = function() {
                 console.log("Requested heart rate data, but it was badly formatted");
                 console.log(data);
             }
+        }, function(error) {
+            console.log("Error requesting heart rate data");
+            console.log(error);
         });
     }
 }
 
 var updateHeartRate = function() {
     heartRateUpdateActive = true;
-    var rt = new Date();
-    var waitTimeForRequest = 0;
-    if (lastHeartRateRequestTime !== undefined && rt.getTime() - lastHeartRateRequestTime.getTime() < 10000)
-        waitTimeForRequest = 20000;
-    lastHeartRateRequestTime = rt;
-    setTimeout(makeHeartDataRequestIfNeeded, waitTimeForRequest);
+    makeHeartDataRequestIfNeeded();
     if (heartRateData.length < 2) {
         heartRateUpdateActive = false;
         return;
@@ -186,7 +192,9 @@ var updateHeartRate = function() {
 var fetchHeartRate = function(startTimeDate, successCallback, errorCallback) {
     console.log('fetchHeartRate: ' + startTimeDate);
     if (!accessToken) {
-        console.log("fetchHeartRate: Not yet authenticated.");
+        console.log("fetchHeartRate: Not yet authorized.");
+        errorCallback("Not yet authorized");
+        return;
     }
     var thisMoment = now();
     var startTime = dateFormat(startTimeDate, "hh:MM");
@@ -194,7 +202,7 @@ var fetchHeartRate = function(startTimeDate, successCallback, errorCallback) {
     var startDate = dateFormat(startTimeDate, "yyyy-mm-dd");
     var path = `/activities/heart/date/${startDate}/1d/1sec/time/${startTime}/${endTime}.json`
     console.log('Sending heart rate request');
-    return client.get(path, accessToken).then(successCallback, errorCallback);
+    client.get(path, accessToken).then(successCallback, errorCallback);
 }
 
 ////////////////// SLEEP DATA //////////////////////////
@@ -258,6 +266,8 @@ var clearSleepDataBefore = function(date) {
 }
 
 var appendSleepDataFromResponse = function(res) {
+
+    console.log("Received sleep data");
     // This is an array of all the sleep times for that day
     var sleeps = res[0].sleep;
     var sleepDate = sleeps[0].dateOfSleep;
@@ -276,7 +286,7 @@ var appendSleepDataFromResponse = function(res) {
 }
 
 var refreshSleepData = function() {
-    // Can't do anything if we aren't authenticated
+    // Can't do anything if we aren't authorized
     if (!accessToken) {
         console.log("refreshSleepData: No access token");
         return;
@@ -285,11 +295,16 @@ var refreshSleepData = function() {
     // Remove unnecessary sleep data, if it exists
     clearSleepDataBefore(daysAgo(1));
 
+    var printError = function(err) {
+        console.log("Error fetching sleep data");
+        console.log(err);
+    }
+
     // Get yesterday's sleep data
-    fetchSleepData(daysAgo(1), appendSleepDataFromResponse);
+    fetchSleepData(daysAgo(1), appendSleepDataFromResponse, printError);
 
     // Update today's sleep data
-    fetchSleepData(now(), appendSleepDataFromResponse);
+    fetchSleepData(now(), appendSleepDataFromResponse, printError);
 }
 
 var updateSleepData = function() {
@@ -300,9 +315,10 @@ var updateSleepData = function() {
     hue.userState = currentSleepState;
 }
 
-var fetchSleepData = function(date, callback) {
+var fetchSleepData = function(date, successCallback, errorCallback) {
     if (!accessToken) {
         console.log("fetchSleepData: No access token");
+        errorCallback("fetchSleepData: No access token");
         return;
     }
     console.log('Sending sleep data request');
@@ -313,7 +329,7 @@ var fetchSleepData = function(date, callback) {
     client.get(
         `/sleep/date/${sleepDateStr}.json`,
         accessToken
-    ).then(callback);
+    ).then(successCallback, errorCallback);
 }
 
 ////////////////// RUN LOOP //////////////////////////
@@ -331,6 +347,17 @@ var refreshAccessToken = function() {
         }, function(result) {
             console.log("Failed to refresh access token");
             console.log(result.stack);
+        });
+    }
+}
+
+var revokeAccessToken = function() {
+    console.log("Revoking access token");
+    if (!accessToken) {
+        console.log("No access token to revoke");
+    } else {
+        client.revokeAccessToken(accessToken).then(function (result) {
+            console.log("Access token revoked!");
         });
     }
 }
@@ -366,6 +393,16 @@ app.get("/callback", function (req, res) {
     });
 });
 
+app.get('/revoke', function(req, res) {
+    revokeAccessToken();
+    res.redirect(encodeURIComponent("/?message=Access token revoked"));
+});
+
+app.get('/resetHue', function(req, res) {
+    restartHue();
+    res.redirect(encodeURIComponent("/?message=Hue reset"));
+});
+
 app.get('/sleep', function (req, res) {
     res.send(JSON.stringify(sleepDataByDate));
 });
@@ -380,8 +417,8 @@ app.get('/', function(req, res) {
     }
     res.render('index',
         {
-            title: 'Hey',
-            message: 'Hello there!',
+            title: 'FitBit-Hue: Dashboard',
+            message: req.query.message,
             fitApiStatus: getFitApiStatus(),
             lastHeartRate: hue.heartRate,
             sleepStatus: displayStringForUserState(hue.userState),
@@ -400,6 +437,8 @@ app.listen(3000, function(){
     // hue.on("crash", restartHue);
     // restartHue();
     // setInterval(restartHue, 60000 * 30);
+
+    setInterval(makeSureHeartDataIsActive, 60000 * 1);
 
     // refreshSleepData();
     // setInterval(refreshSleepData, 60000 * 5);
