@@ -124,7 +124,7 @@ var makeHeartDataRequestIfNeeded = function(force) {
     if (force || heartRateData.length < 10) {
         var lastDataPointTime = now();
         // if we have heart rate data already
-        if (false && heartRateData.length !== 0) {
+        if (heartRateData.length !== 0) {
             // get data from the last point we have
             var lastDataTimeComponents = heartRateData[heartRateData.length - 1].time.split(':');
             lastDataPointTime.setHours(lastDataTimeComponents[0]);
@@ -148,6 +148,7 @@ var makeHeartDataRequestIfNeeded = function(force) {
                     }
                 } else {
                     console.log("Requested heart rate data, but didn't get any");
+                    debugger;
                 }
             } else {
                 console.log("Requested heart rate data, but it was badly formatted");
