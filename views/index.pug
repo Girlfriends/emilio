@@ -23,6 +23,13 @@ body
 			| Heart rate data fetched at: #{ heartRateFetchTime }
 		li.fit-sleep-time
 			| Sleep data fetched at: #{ sleepDataFetchTime }
+		li.hue-status
+			if hueStatus
+				| Hue Connected!
+			else
+				| Hue not connected
+				| 
+				a(href="/resetHue") Reset Connection to Hue
 		li.light-one-brightness
 			| Light one brightness: #{ lightOneBrightness }
 		li.light-two-brightness

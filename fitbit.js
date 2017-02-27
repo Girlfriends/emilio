@@ -408,7 +408,7 @@ app.get('/revoke', function(req, res) {
 
 app.get('/resetHue', function(req, res) {
     restartHue();
-    res.redirect("/?message=" + encodeURIComponent("Hue reset"));
+    res.redirect('/?' + encodeURIComponent("message=Hue reset"));
 });
 
 app.get('/sleep', function (req, res) {
@@ -434,7 +434,8 @@ app.get('/', function(req, res) {
             heartRateFetchTime: lastHeartRateRequestTime,
             sleepDataFetchTime: lastSleepDataRequestTime,
             lightOneBrightness: hue.getLightBrightness(0),
-            lightTwoBrightness: hue.getLightBrightness(1)
+            lightTwoBrightness: hue.getLightBrightness(1),
+            hueStatus: hue.isAnimating
         });
 });
 
