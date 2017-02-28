@@ -43,6 +43,8 @@ var FitbitApiClient = require("fitbit-node"),
 // Use this to set the present to some time in the past, for testing
 var now = function() {
     var tn = new Date();
+    tn.setHours(tn.getHours() - 11);
+    tn.setMinutes(tn.getMinutes() - 53);
     // tn.setMinutes(14);
     // tn.setDate(tn.getDate() - 3);
     return tn;
@@ -87,7 +89,11 @@ var compareFitbitDateStrings = function(d1, d2) {
 var compareFitbitTimeStrings = function(t1, t2) {
     var t1Comp = t1.split(":");
     var t2Comp = t2.split(":");
-    if (t1Comp[0] - t2Comp[0] > 12) t2Comp[0] += 24;
+    if (t2Comp[0] > 24) {
+        if (t1Comp[0] - t2Comp[0] > 12) t2Comp[0] += 24;
+    } else {
+        if (t1Comp[0] - t2Comp[0] > 6) t2Comp[0] += 12;
+    }
     var t1a = t1Comp[0] * 3600 + t1Comp[1] * 60 + t1Comp[2] * 1;
     var t2a = t2Comp[0] * 3600 + t2Comp[1] * 60 + t2Comp[2] * 1;
     return t1a - t2a;
@@ -135,12 +141,18 @@ var makeHeartDataRequestIfNeeded = function(force) {
         if (heartRateData.length !== 0) {
             // get data from the last point we have
             var lastDataTimeComponents = heartRateData[heartRateData.length - 1].time.split(':');
+
+            // If the current time is just after midnight, but the last time we fetched data was before midnight,
+            // then the start time is almost definitely yesterday
+            var needsWrap = (lastDataPointTime.getHours() < 6 && lastDataTimeComponents[0] > 6);
+
             lastDataPointTime.setHours(lastDataTimeComponents[0]);
             lastDataPointTime.setMinutes(lastDataTimeComponents[1]);
             lastDataPointTime.setSeconds(lastDataTimeComponents[2]);
+            if (needsWrap) lastDataPointTime.setDate(lastDataPointTime.getDate() - 1);
         } else {
             // get data from fifteen minutes ago
-            lastDataPointTime.setMinutes(lastDataPointTime.getMinutes() - 25);
+            lastDataPointTime.setMinutes(lastDataPointTime.getMinutes() - 5);
         }
 
         lastHeartRateRequestTime = new Date();

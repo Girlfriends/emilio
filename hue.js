@@ -100,7 +100,7 @@ module.exports = class Hue extends EventEmitter {
 	_processSearchResult(bridge) {
 		return new Promise((function(resolve, reject) {
 			if (!bridge.length || !bridge[0]) {
-				logger.warning('No bridges found.');
+				logger.warn('No bridges found.');
 				reject('No bridges found.');
 			} else {
 				logger.info("Hue Bridges Found: " + JSON.stringify(bridge));
