@@ -43,8 +43,8 @@ var FitbitApiClient = require("fitbit-node"),
 // Use this to set the present to some time in the past, for testing
 var now = function() {
     var tn = new Date();
-    tn.setHours(tn.getHours() - 11);
-    tn.setMinutes(tn.getMinutes() - 53);
+    // tn.setHours(tn.getHours() - 11);
+    // tn.setMinutes(tn.getMinutes() - 53);
     // tn.setMinutes(14);
     // tn.setDate(tn.getDate() - 3);
     return tn;
@@ -152,7 +152,7 @@ var makeHeartDataRequestIfNeeded = function(force) {
             if (needsWrap) lastDataPointTime.setDate(lastDataPointTime.getDate() - 1);
         } else {
             // get data from fifteen minutes ago
-            lastDataPointTime.setMinutes(lastDataPointTime.getMinutes() - 5);
+            lastDataPointTime.setMinutes(lastDataPointTime.getMinutes() - 18);
         }
 
         lastHeartRateRequestTime = new Date();
@@ -229,6 +229,7 @@ var fetchHeartRate = function(startTimeDate, successCallback, errorCallback) {
 ////////////////// SLEEP DATA //////////////////////////
 
 var sleepDataForTime = function(date) {
+    date.setDate(date.getDate() - 1);
     var fitbitDate = dateFormat(date, "yyyy-mm-dd");
 
     var sleepLog = null;
@@ -275,6 +276,7 @@ var sleepDataForTime = function(date) {
 }
 
 var clearSleepDataBefore = function(date) {
+    date.setDate(date.getDate() - 1);
     var fitbitDate = dateFormat(date, "yyyy-mm-dd");
     var toDelete = [];
     for (var k in sleepDataByDate) {
@@ -347,6 +349,10 @@ var fetchSleepData = function(date, successCallback, errorCallback) {
     logger.info('Sending sleep data request');
 
     lastSleepDataRequestTime = new Date();
+
+    // Sleep data doesn't sync until the day before, so we look one day back in time for all sleep data
+    date.setDate(date.getDate() - 1);
+
     var sleepDateStr = dateFormat(date, 'yyyy-mm-dd');
 
     client.get(
