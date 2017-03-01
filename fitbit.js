@@ -48,7 +48,7 @@ var now = function() {
     // tn.setHours(tn.getHours() - 10);
     // tn.setMinutes(tn.getMinutes() - 53);
     // tn.setMinutes(14);
-    // tn.setDate(tn.getDate() - 3);
+    // tn.setDate(tn.getDate() - 1);
     return tn;
 }
 
@@ -171,6 +171,7 @@ var makeHeartDataRequestIfNeeded = function(force) {
         lastHeartRateRequestTime = thisFetchTime;
         fetchHeartRate(lastDataPointTime, function(wrappedData) {
             var data = wrappedData[0];
+            logger.info("Received heart rate data at: " + new Date());
             if (data.hasOwnProperty("activities-heart-intraday") &&
                 data["activities-heart-intraday"].hasOwnProperty("dataset")) {
                 data = data["activities-heart-intraday"]["dataset"];
@@ -230,11 +231,18 @@ var fetchHeartRate = function(startTimeDate, successCallback, errorCallback) {
         return;
     }
     var thisMoment = now();
+
+    var offset = offsetFromUTCMillis || 0;
+    thisMoment.setSeconds(thisMoment.getSeconds() + offsetFromUTCMillis / 1000);
+    startTimeDate.setSeconds(startTimeDate.getSeconds() + offsetFromUTCMillis / 1000);
+
     // thisMoment.setMinutes(thisMoment.getMinutes() + 15);
-    var startTime = dateFormat(startTimeDate, "hh:MM");
-    var endTime = dateFormat(thisMoment, "hh:MM");
-    var startDate = dateFormat(startTimeDate, "yyyy-mm-dd");
-    var path = `/activities/heart/date/${startDate}/1d/1sec/time/${startTime}/${endTime}.json`
+    var startTime = dateFormat(startTimeDate, "hh:MM", true);
+    var endTime = dateFormat(thisMoment, "hh:MM", true);
+    var startDate = dateFormat(startTimeDate, "yyyy-mm-dd", true);
+    var endDate = dateFormat(thisMoment, "yyyy-mm-dd", true);
+
+    var path = `/activities/heart/date/${startDate}/${endDate}/1sec/time/${startTime}/${endTime}.json`
     logger.info('Sending heart rate request');
     client.get(path, accessToken).then(successCallback, errorCallback);
 }
