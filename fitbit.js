@@ -122,11 +122,16 @@ var displayStringForUserState = function(state) {
 var appendNewHeartRateData = function(datapoints) {
     if (heartRateData.length === 0) {
         heartRateData = heartRateData.concat(datapoints);
+        return heartRateData.length;
     } else {
+        var pointsAdded = 0;
         var lastTime = heartRateData[heartRateData.length - 1].time;
         for (var i=0; i<datapoints.length; i++) {
             var pointTime = datapoints[i].time;
-            if (compareFitbitTimeStrings(pointTime, lastTime) > 0) heartRateData.push(datapoints[i]);
+            if (compareFitbitTimeStrings(pointTime, lastTime) > 0) {
+                pointsAdded++;
+                heartRateData.push(datapoints[i]);
+            }
         }
     }
 }
@@ -158,15 +163,20 @@ var makeHeartDataRequestIfNeeded = function(force) {
             lastDataPointTime.setMinutes(lastDataPointTime.getMinutes() - 18);
         }
 
-        lastHeartRateRequestTime = new Date();
+        // Safeguard to break us out in case we're in danger of making too many requests
+        var thisFetchTime = new Date();
+        if (lastHeartRateRequestTime && thisFetchTime.getTime() - lastHeartRateRequestTime.getTime() < 60000)
+            return;
+
+        lastHeartRateRequestTime = thisFetchTime;
         fetchHeartRate(lastDataPointTime, function(wrappedData) {
             var data = wrappedData[0];
             if (data.hasOwnProperty("activities-heart-intraday") &&
                 data["activities-heart-intraday"].hasOwnProperty("dataset")) {
                 data = data["activities-heart-intraday"]["dataset"];
                 if (data.length > 0) {
-                    appendNewHeartRateData(data);
-                    if (!heartRateUpdateActive) {
+                    var pointsAppended = appendNewHeartRateData(data);
+                    if (!heartRateUpdateActive && pointsAppended > 0) {
                         updateHeartRate();
                     }
                 } else {
