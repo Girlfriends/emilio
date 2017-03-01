@@ -27,6 +27,8 @@ var forcedSleepState;
 var lastHeartRateRequestTime;
 var lastSleepDataRequestTime;
 var userId;
+var timezone;
+var offsetFromUTCMillis;
 var accessToken;
 var refreshToken;
 var expiresAt;
@@ -43,7 +45,7 @@ var FitbitApiClient = require("fitbit-node"),
 // Use this to set the present to some time in the past, for testing
 var now = function() {
     var tn = new Date();
-    // tn.setHours(tn.getHours() - 11);
+    // tn.setHours(tn.getHours() - 10);
     // tn.setMinutes(tn.getMinutes() - 53);
     // tn.setMinutes(14);
     // tn.setDate(tn.getDate() - 3);
@@ -62,19 +64,20 @@ var daysAgo = function(ago) {
     return d;
 }
 
+var fetchProfile = function(accessToken) {
+    return client.get('/profile.json', accessToken).then(function(results){
+        userId = results[0].user.encodedId;
+        timezone = results[0].user.timezone;
+        offsetFromUTCMillis = results[0].user.offsetFromUTCMillis;
+    });
+}
+
 var setAccessToken = function(_accessToken, _refreshToken) {
     accessToken = _accessToken;
     refreshToken = _refreshToken;
-    refreshSleepData();
-    if (!heartRateUpdateActive) updateHeartRate();
-}
-
-var fetchProfile = function(accessToken, response) {
-    client.get('/profile.json', accessToken).then(function(results){
-        userId = results[0].encodedId;
-        if (response) {
-            response.send(results[0]);
-        }
+    return fetchProfile(accessToken).then(function() {
+        refreshSleepData();
+        if (!heartRateUpdateActive) updateHeartRate();
     });
 }
 
@@ -230,7 +233,13 @@ var fetchHeartRate = function(startTimeDate, successCallback, errorCallback) {
 
 var sleepDataForTime = function(date) {
     date.setDate(date.getDate() - 1);
+    var offset = offsetFromUTCMillis || 0;
+
+    date.setSeconds(date.getSeconds() + offset/1000);
     var fitbitDate = dateFormat(date, "yyyy-mm-dd");
+
+    date.setSeconds(0);
+    var hms = dateFormat(date, "hh:MM:ss", true);
 
     var sleepLog = null;
     for (var k in sleepDataByDate) {
@@ -254,8 +263,6 @@ var sleepDataForTime = function(date) {
 
     if (sleepLog === null) return hue.USER_STATES.DAY;
 
-    date.setSeconds(0);
-    var hms = dateFormat(date, "hh:MM:ss");
     var datum = _.find(sleepLog.minuteData, function(d) {return d.dateTime === hms});
     if (!datum) return hue.userState; // don't change sleep status if you are sleeping but don't have the data
 
@@ -306,6 +313,8 @@ var appendSleepDataFromResponse = function(res) {
 
         sleepDataByDate[sleepDate].push(sleepData);
     }
+
+    updateSleepData();
 }
 
 var refreshSleepData = function() {
@@ -407,7 +416,7 @@ var restartHue = function() {
 app.get("/authorize", function (req, res) {
     // request access to the user's activity, heartrate, location, nutrion, profile, settings, sleep, social, and weight scopes
     logger.info('Authorizing...');
-    res.redirect(client.getAuthorizeUrl('activity heartrate sleep', callbackUrl));
+    res.redirect(client.getAuthorizeUrl('activity heartrate profile sleep', callbackUrl));
 });
 
 // handle the callback from the Fitbit authorization flow
@@ -417,8 +426,9 @@ app.get("/callback", function (req, res) {
     client.getAccessToken(req.query.code, callbackUrl).then(function (result) {
         // use the access token to fetch the user's profile information
         logger.info('Received access token');
-        setAccessToken(result.access_token, result.refresh_token);
-        res.redirect("/");
+        setAccessToken(result.access_token, result.refresh_token).then(function() {
+            res.redirect("/");
+        });
     }).catch(function (error) {
         res.send(error);
     });
