@@ -421,6 +421,8 @@ var restartHue = function() {
 app.get("/authorize", function (req, res) {
     // request access to the user's activity, heartrate, location, nutrion, profile, settings, sleep, social, and weight scopes
     logger.info('Authorizing...');
+    const callbackUrl = "http://" + req.headers.host + "/callback";
+    console.log(callbackUrl);
     res.redirect(client.getAuthorizeUrl('activity heartrate profile sleep', callbackUrl));
 });
 
@@ -428,6 +430,8 @@ app.get("/authorize", function (req, res) {
 app.get("/callback", function (req, res) {
     // exchange the authorization code we just received for an access token
     logger.info('Authorization callback requested');
+    const callbackUrl = "http://" + req.headers.host + "/callback";
+    console.log(callbackUrl);
     client.getAccessToken(req.query.code, callbackUrl).then(function (result) {
         // use the access token to fetch the user's profile information
         logger.info('Received access token');
