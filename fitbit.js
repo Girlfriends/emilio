@@ -5,6 +5,7 @@ var express = require("express"),
     request = require('request'),
     _ = require("lodash"),
     dateFormat = require("dateformat"),
+    moment = require("moment-timezone"),
     Hue = require("./hue.js"),
     clientId = "2284MH",
     clientSecret = "cad34dee857fd77a7408ce4d8e5e94af";
@@ -44,24 +45,10 @@ var FitbitApiClient = require("fitbit-node"),
 
 // Use this to set the present to some time in the past, for testing
 var now = function() {
-    var tn = new Date();
-    // tn.setHours(tn.getHours() - 10);
-    // tn.setMinutes(tn.getMinutes() - 53);
-    // tn.setMinutes(14);
-    // tn.setDate(tn.getDate() - 1);
+    var tn = moment();
+    // tn.subtract(4, 'days');
+    // tn.subtract(8, 'hours');
     return tn;
-}
-
-var minutesAgo = function(ago) {
-    var d = now();
-    d.setMinutes(d.getMinutes() - ago);
-    return d;
-}
-
-var daysAgo = function(ago) {
-    var d = now();
-    d.setDate(d.getDate() - ago);
-    return d;
 }
 
 var fetchProfile = function(accessToken) {
@@ -133,6 +120,7 @@ var appendNewHeartRateData = function(datapoints) {
                 heartRateData.push(datapoints[i]);
             }
         }
+        return pointsAdded;
     }
 }
 
@@ -150,17 +138,21 @@ var makeHeartDataRequestIfNeeded = function(force) {
             // get data from the last point we have
             var lastDataTimeComponents = heartRateData[heartRateData.length - 1].time.split(':');
 
+            var currentHours = moment(lastDataPointTime).tz(timezone).hours()
+
             // If the current time is just after midnight, but the last time we fetched data was before midnight,
             // then the start time is almost definitely yesterday
-            var needsWrap = (lastDataPointTime.getHours() < 6 && lastDataTimeComponents[0] > 6);
+            var needsWrap = (currentHours < 6 && lastDataTimeComponents[0] > 6);
 
-            lastDataPointTime.setHours(lastDataTimeComponents[0]);
-            lastDataPointTime.setMinutes(lastDataTimeComponents[1]);
-            lastDataPointTime.setSeconds(lastDataTimeComponents[2]);
-            if (needsWrap) lastDataPointTime.setDate(lastDataPointTime.getDate() - 1);
+            // Convert to local timezone before doing all this bullshit
+            lastDataPointTime = moment(lastDataPointTime).tz(timezone);
+            lastDataPointTime.hours(lastDataTimeComponents[0]);
+            lastDataPointTime.minutes(lastDataTimeComponents[1]);
+            lastDataPointTime.seconds(lastDataTimeComponents[2]);
+            if (needsWrap) lastDataPointTime.subtract(1, 'days');
         } else {
             // get data from fifteen minutes ago
-            lastDataPointTime.setMinutes(lastDataPointTime.getMinutes() - 18);
+            lastDataPointTime.subtract(15, 'minutes');
         }
 
         // Safeguard to break us out in case we're in danger of making too many requests
@@ -232,32 +224,27 @@ var fetchHeartRate = function(startTimeDate, successCallback, errorCallback) {
     }
     var thisMoment = now();
 
-    var offset = offsetFromUTCMillis || 0;
-    thisMoment.setSeconds(thisMoment.getSeconds() + offsetFromUTCMillis / 1000);
-    startTimeDate.setSeconds(startTimeDate.getSeconds() + offsetFromUTCMillis / 1000);
-
-    // thisMoment.setMinutes(thisMoment.getMinutes() + 15);
-    var startTime = dateFormat(startTimeDate, "hh:MM", true);
-    var endTime = dateFormat(thisMoment, "hh:MM", true);
-    var startDate = dateFormat(startTimeDate, "yyyy-mm-dd", true);
-    var endDate = dateFormat(thisMoment, "yyyy-mm-dd", true);
+    var startTime = moment(startTimeDate).tz(timezone).format("hh:mm");
+    var endTime = moment(thisMoment).tz(timezone).format("hh:mm");
+    var startDate = moment(startTimeDate).tz(timezone).format("YYYY-MM-DD");
+    var endDate = moment(thisMoment).tz(timezone).format("YYYY-MM-DD");
 
     var path = `/activities/heart/date/${startDate}/${endDate}/1sec/time/${startTime}/${endTime}.json`
-    logger.info('Sending heart rate request');
+    logger.info(`Sending heart rate request ${path}`);
     client.get(path, accessToken).then(successCallback, errorCallback);
 }
 
 ////////////////// SLEEP DATA //////////////////////////
 
 var sleepDataForTime = function(date) {
-    date.setDate(date.getDate() - 1);
-    var offset = offsetFromUTCMillis || 0;
+    date.subtract(1, 'days');
 
-    date.setSeconds(date.getSeconds() + offset/1000);
-    var fitbitDate = dateFormat(date, "yyyy-mm-dd");
+    if (!accessToken) return hue.userState;
 
-    date.setSeconds(0);
-    var hms = dateFormat(date, "hh:MM:ss", true);
+    var fitbitDate = moment(date).tz(timezone).format("YYYY-MM-DD");
+
+    date.seconds(0);
+    var hms = moment(date).tz(timezone).format("hh:mm:ss");
 
     var sleepLog = null;
     for (var k in sleepDataByDate) {
@@ -265,10 +252,10 @@ var sleepDataForTime = function(date) {
             var sleepData = sleepDataByDate[k];
             for (var i=0; i<sleepData.length; i++) {
                 sleepLog = sleepData[i];
-                var startDate = new Date(sleepLog.startTime);
-                var endDate = new Date(sleepLog.startTime);
-                endDate.setMinutes(endDate.getMinutes() + sleepLog.timeInBed);
-                if (date.getTime() > startDate.getTime() && date.getTime() < endDate.getTime()) {
+                var startDate = moment(sleepLog.startTime).utcOffset(offsetFromUTCMillis / 60000, true);
+                var endDate = moment(sleepLog.startTime).utcOffset(offsetFromUTCMillis / 60000, true);
+                endDate.add(sleepLog.timeInBed, 'minutes');
+                if (date.unix() > startDate.unix() && date.unix() < endDate.unix()) {
                     break;
                 } else {
                     sleepLog = null;
@@ -285,14 +272,14 @@ var sleepDataForTime = function(date) {
     if (!datum) return hue.userState; // don't change sleep status if you are sleeping but don't have the data
 
     var sleepState = hue.USER_STATES.DAY;
-    switch (datum) {
-        case 1:
+    switch (datum.value) {
+        case '1':
             sleepState = hue.USER_STATES.ASLEEP;
             break;
-        case 2:
+        case '2':
             sleepState = hue.USER_STATES.RESTLESS;
             break;
-        case 3:
+        case '3':
             sleepState = hue.USER_STATES.AWAKE;
             break;
     }
@@ -301,8 +288,8 @@ var sleepDataForTime = function(date) {
 }
 
 var clearSleepDataBefore = function(date) {
-    date.setDate(date.getDate() - 1);
-    var fitbitDate = dateFormat(date, "yyyy-mm-dd");
+    date.subtract(1, 'days');
+    var fitbitDate = moment(date).tz(timezone).format("YYYY-MM-DD");
     var toDelete = [];
     for (var k in sleepDataByDate) {
         if (sleepDataByDate.hasOwnProperty(k)) {
@@ -343,7 +330,7 @@ var refreshSleepData = function() {
     }
 
     // Remove unnecessary sleep data, if it exists
-    clearSleepDataBefore(daysAgo(1));
+    clearSleepDataBefore(now().subtract(1, 'days'));
 
     var printError = function(err) {
         logger.error("Error fetching sleep data");
@@ -351,7 +338,7 @@ var refreshSleepData = function() {
     }
 
     // Get yesterday's sleep data
-    fetchSleepData(daysAgo(1), appendSleepDataFromResponse, printError);
+    fetchSleepData(now().subtract(1, 'days'), appendSleepDataFromResponse, printError);
 
     // Update today's sleep data
     fetchSleepData(now(), appendSleepDataFromResponse, printError);
@@ -359,9 +346,9 @@ var refreshSleepData = function() {
 
 var updateSleepData = function() {
     if (forcedSleepState === undefined) {
-        var sleepTime = minutesAgo(15);
+        var sleepTime = now().subtract(15, 'minutes');
         var currentSleepState = sleepDataForTime(sleepTime);
-        logger.info("updateSleepData time: " + sleepTime);
+        logger.info("updateSleepData time: " + sleepTime.format());
         logger.info("updateSleepData state: " + currentSleepState);
         hue.userState = currentSleepState;
     }
@@ -378,9 +365,9 @@ var fetchSleepData = function(date, successCallback, errorCallback) {
     lastSleepDataRequestTime = new Date();
 
     // Sleep data doesn't sync until the day before, so we look one day back in time for all sleep data
-    date.setDate(date.getDate() - 1);
+    date.subtract(1, 'days');
 
-    var sleepDateStr = dateFormat(date, 'yyyy-mm-dd');
+    var sleepDateStr = moment(date).tz(timezone).format("YYYY-MM-DD");
 
     client.get(
         `/sleep/date/${sleepDateStr}.json`,
